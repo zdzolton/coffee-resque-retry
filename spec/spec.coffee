@@ -37,8 +37,7 @@ vows.describe('coffee-resque failure retry')
           worker.on 'error', (err, work, queue, job) =>
             {callee} = arguments
             callee.badCount or= 0
-            if job.class is 'bad' and ++callee.badCount is 2
-              @callback()
+            @callback() if job.class is 'bad' and ++callee.badCount is 2
           return
         
         'should have ran six times': ->

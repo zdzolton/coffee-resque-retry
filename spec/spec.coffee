@@ -6,12 +6,11 @@ resqueRetry = require '../src/index'
 resque = require('coffee-resque').connect host: 'localhost', port: 6379
 
 worker = null
-badErrorCBCount = 0
 
 jobs =
   bad:
     retry_limit: 2
-    func: (cb) ->
+    func: (x, cb) ->
       {callee} = arguments
       callee.count or= 0
       callee.count++
@@ -36,15 +35,18 @@ vows.describe('coffee-resque failure retry')
       'set up an error callback':
         topic: ->
           worker.on 'error', (err, work, queue, job) =>
-            @callback() if job.class is 'bad' and ++badErrorCBCount is 2
+            {callee} = arguments
+            callee.badCount or= 0
+            if job.class is 'bad' and ++callee.badCount is 2
+              @callback()
           return
         
         'should have ran six times': ->
           assert.equal jobs.bad.func.count, 6
       
       'start the mouse trap': ->
-        resque.enqueue 'coffee-resque-retry', 'bad', []
-        resque.enqueue 'coffee-resque-retry', 'bad', []
+        resque.enqueue 'coffee-resque-retry', 'bad', ['a']
+        resque.enqueue 'coffee-resque-retry', 'bad', ['b']
         resque.enqueue 'coffee-resque-retry', 'bad2', []
         worker.start()
 

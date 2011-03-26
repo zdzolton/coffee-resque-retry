@@ -23,23 +23,26 @@ overrideFail = (worker) ->
   originalFailFunc = worker.fail
   {redis} = worker
   (error, job) ->
-    key = redisRetryKey job
-    redis.get key, (err, retryAttempt) ->
+    getRetryAttempt worker, job, (err, retryAttempt) ->
       unless err?
         # if we're gonna retry, let's suppress the failure logging
         if retryAttempt < getRetryLimit worker, job
           retryFailure worker, job, err
         else
-          redis.del key
+          redis.del redisRetryKey job
           originalFailFunc.apply worker, [error, job]
 
-getRetryLimit = (worker, job) ->
-  rv = 0
+getJobWithRetry = (worker, job) ->
   for name, jobDef of worker.jobsWithRetry
-    if name is job.class
-      rv = jobDef.retry_limit or 0
-      break
-  rv
+    return jobDef if name is job.class
+
+getRetryLimit = (worker, job) ->
+  getJobWithRetry(worker, job)?.retry_limit or 0
+
+getRetryDelay = (worker, job) ->
+  getJobWithRetry(worker, job)?.retry_delay or 0
+
+getRetryAttempt = (worker, job, cb) -> worker.redis.get redisRetryKey(job), cb
 
 identifier = (args) ->
   types = ['string', 'number', 'boolean']
@@ -50,7 +53,10 @@ identifier = (args) ->
 redisRetryKey = (job) ->
   name = job.class
   {args} = job
-  ['resque-retry', name].concat(identifier args).join(":").replace /\s/g, ''
+  ['resque-retry', name]
+    .concat(identifier args)
+    .join(":")
+    .replace /\s/g, ''
 
 beforePerformRetry = (worker, job) ->
   {redis} = worker
@@ -60,13 +66,30 @@ beforePerformRetry = (worker, job) ->
 
 retryFailure = (worker, job, err) ->
   {redis} = worker
-  key = redisRetryKey job
-  redis.get key, (err, retryAttempt) ->
+  getRetryAttempt worker, job, (err, retryAttempt) ->
     unless err?
       if retryAttempt < getRetryLimit worker, job
-        resque = require('coffee-resque').connect {redis}
-        resque.enqueue worker.queue, job.class, job.args
-      else redis.del key
+        tryAgain redis, worker, job
+      else redis.del redisRetryKey job
+
+tryAgain = (redis, worker, job) ->
+  retryDelay = getRetryDelay worker, job
+  if retryDelay <= 0
+    require('coffee-resque')
+      .connect({redis})
+      .enqueue worker.queue, job.class, job.args
+  else enqueueIn redis, retryDelay, worker.queue, job.class, job.args
 
 afterPerformRetry = (worker, job) ->
   worker.redis.del redisRetryKey job
+
+enqueueIn = (redis, numberOfSecondsFromNow, queue, jobName, args) ->
+  timestamp = (new Date).valueOf() + numberOfSecondsFromNow * 1000
+  enqueueAt redis, timestamp, queue, jobName, args
+
+enqueueAt = (redis, timestamp, queue, jobName, args) ->
+  delayedPush redis, timestamp, {queue, class: jobName, args}
+
+delayedPush = (redis, timestamp, item) ->
+  redis.rpush "delayed:#{timestamp}", JSON.stringify item
+  redis.zadd 'delayed_queue_schedule', timestamp, timestamp

@@ -2,9 +2,11 @@
 vows = require 'vows'
 assert = require 'assert'
 
+redisHostAndPort = host: 'localhost', port: 6379
+
 resqueRetry = require '../src/index'
 watcher = require '../src/scheduled-task-watcher'
-resque = require('coffee-resque').connect host: 'localhost', port: 6379
+resque = require('coffee-resque').connect redisHostAndPort
 
 worker = null
 startTime = null
@@ -58,7 +60,7 @@ vows.describe('coffee-resque failure retry')
         resque.enqueue 'coffee-resque-retry', 'bad', ['a']
         resque.enqueue 'coffee-resque-retry', 'bad', ['b']
         resque.enqueue 'coffee-resque-retry', 'bad2', []
-        watcher.start host: 'localhost', port: 6379
+        watcher.start redisHostAndPort
         worker.start()
         startTime = new Date
 
@@ -70,5 +72,11 @@ vows.describe('coffee-resque failure retry')
         true
       
       ok: (v) -> assert.ok v
+      
+      "starting extra times": ->
+        assert.doesNotThrow (-> watcher.start redisHostAndPort), Error
+
+      "stopping extra times": ->
+        assert.doesNotThrow (-> watcher.stop()), Error
 
   .export module

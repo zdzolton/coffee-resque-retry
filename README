@@ -1,0 +1,52 @@
+coffee-resque-retry
+===================
+
+Adds some retry options to coffee-resque.
+
+Concept lifted from Ruby's resque-retry. Thanks lantins! (^_^)
+
+
+To run specs:
+
+  make test
+
+Or, more simply:
+
+  vows
+
+
+Description:  
+
+I've tried to just lightly wrap the function for creating
+workers, but of course, you need a watcher to handle looking
+for the scheduled tasks needed for delayed retries.
+
+Usage:
+
+  resque = require('coffee-resque').connect redisHostAndPort
+
+  worker = require('coffee-resque')
+    .createWorker resque, "some-queue-name"
+      task_name:
+        retry_limit: 2                
+        retry_delay: 20 
+        func: (arg1, arg2, cb) -> 
+          doSomething arg1, arg2, (err, result) ->
+            if err?
+              cb new Error err
+            else 
+              cb result
+      another_task:
+        retry_limit: 6
+        func: (arg, cb) -> 
+          doSomethingElse arg, (err, result) ->
+            if err?
+              cb new Error err
+            else 
+              cb result
+
+
+  worker.start()
+
+Now, wait for other code to enqueue tasks, and when you're
+program is shutting down remember to call `worker.stop()`

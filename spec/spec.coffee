@@ -63,6 +63,9 @@ vows.describe('coffee-resque failure retry')
         watcher.start redisHostAndPort
         worker.start()
         startTime = new Date
+      
+      "starting extra times": ->
+        assert.doesNotThrow (-> watcher.start redisHostAndPort), Error
 
   .addBatch
     'terminate test suite':
@@ -73,9 +76,6 @@ vows.describe('coffee-resque failure retry')
       
       ok: (v) -> assert.ok v
       
-      "starting extra times": ->
-        assert.doesNotThrow (-> watcher.start redisHostAndPort), Error
-
       "stopping extra times": ->
         assert.doesNotThrow (-> watcher.stop()), Error
 

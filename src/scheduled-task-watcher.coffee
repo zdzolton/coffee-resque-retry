@@ -1,28 +1,38 @@
 {puts,inspect} = require 'sys'
 
 redis = intervalID = null
+stopping = false
 
 exports.start = (opts) ->
-  redis = require('redis').createClient opts.port, opts.host
-  intervalID = setInterval handleDelayedItems, 1000
+  unless redis? and not stopping
+    redis = require('redis').createClient opts.port, opts.host
+    intervalID = setInterval handleDelayedItems, 1000
 
 exports.stop = ->
-  clearInterval intervalID
-  redis.quit()
+  stopping = true
+  if redis?
+    clearInterval intervalID
+    redis.quit()
+    redis = intervalID = null
   
 handleDelayedItems = ->
-  nextDelayedTimestamp (err, timestamp) ->
-    if timestamp?
-      enqueueDelayedItemsForTimestamp timestamp, (err) ->
-        # note the recursive looping...
-        nextDelayedTimestamp arguments.callee unless err?
+  unless stopping
+    nextDelayedTimestamp (err, timestamp) ->
+      if timestamp?
+        enqueueDelayedItemsForTimestamp timestamp, (err) ->
+          # note the recursive looping...
+          nextDelayedTimestamp arguments.callee unless err?
   return
 
 nextDelayedTimestamp = (cb) ->
-  redis.zrangebyscore 'delayed_queue_schedule',
-    '-inf', Date.now()
-    'limit', 0, 1
-    (err, timestamps) -> cb err, if timestamps? then timestamps[0] else null
+  try
+    redis.zrangebyscore 'delayed_queue_schedule',
+      '-inf', Date.now()
+      'limit', 0, 1
+      (err, timestamps) ->
+        cb err, if timestamps? then timestamps[0]
+  catch e
+    throw e unless stopping
 
 enqueueDelayedItemsForTimestamp = (timestamp, cb) ->
   nextItemForTimestamp timestamp, (err, item) ->

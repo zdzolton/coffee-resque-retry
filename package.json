@@ -4,9 +4,15 @@
   "version": "0.0.1",
   "repository": {},
   "author": "Zach Zolton <zachary.zolton@gmail.com>",
-  "main": "index",
+  "main": "lib/index",
+  "dependencies": {
+    "coffee-resque": ">=0.1.2"
+  },
   "directories": {
     "lib": "./lib"
+  },
+  "modules": {
+    "scheduled-task-watcher.js": "lib/scheduled-task-watcher.js"
   },
   "scripts": {
     "test": "make test"

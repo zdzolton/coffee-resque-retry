@@ -1,4 +1,5 @@
 {puts,inspect} = require 'sys'
+exports.watcher = require './scheduled-task-watcher'
 
 exports.createWorker = (resque, queue, jobsWithRetry) ->
   worker = resque.worker queue, getRegularJobsObject jobsWithRetry

@@ -24,9 +24,9 @@ for the scheduled tasks needed for delayed retries.
 Usage:
 
   resque = require('coffee-resque').connect redisHostAndPort
+  {createWorker,watcher} = require 'coffee-resque-retry'
 
-  worker = require('coffee-resque')
-    .createWorker resque, "some-queue-name"
+  worker = createWorker resque, "some-queue-name"
       task_name:
         retry_limit: 2                
         retry_delay: 20 

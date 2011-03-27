@@ -1,0 +1,17 @@
+{
+  "name": "coffee-resque-retry",
+  "description": "Adds some retry options to coffee-resque. Concept lifted from Ruby's resque-retry",
+  "version": "0.0.1",
+  "repository": {},
+  "author": "Zach Zolton <zachary.zolton@gmail.com>",
+  "main": "index",
+  "directories": {
+    "lib": "./lib"
+  },
+  "scripts": {
+    "test": "make test"
+  },
+  "engines": {
+    "node": "0.2.6"
+  }
+}

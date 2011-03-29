@@ -1,12 +1,18 @@
 {puts,inspect} = require 'sys'
 vows = require 'vows'
 assert = require 'assert'
+resqueConnect = require('coffee-resque').connect
 
 redisHostAndPort = host: 'localhost', port: 6379
+testQueueName = 'coffee-resque-retry'
 
-resqueRetry = require '../src/index'
-watcher = require '../src/scheduled-task-watcher'
-resque = require('coffee-resque').connect redisHostAndPort
+enqueueTask = (jobName, args) ->
+  resque = resqueConnect redisHostAndPort
+  resque.enqueue testQueueName, jobName, args
+  resque.end()
+
+{createWorker,watcher} = require '../src/index'
+resqueForWorker = resqueConnect redisHostAndPort
 
 worker = null
 startTime = null
@@ -29,7 +35,7 @@ vows.describe('coffee-resque failure retry')
   .addBatch
     'initialize worker object':
       topic: ->
-        worker = resqueRetry.createWorker resque, 'coffee-resque-retry', jobs
+        worker = createWorker resqueForWorker, testQueueName, jobs
         true
       
       'should not fail': ->
@@ -57,9 +63,9 @@ vows.describe('coffee-resque failure retry')
           assert.isTrue (new Date) - startTime >= 3000
       
       'start the mouse trap': ->
-        resque.enqueue 'coffee-resque-retry', 'bad', ['a']
-        resque.enqueue 'coffee-resque-retry', 'bad', ['b']
-        resque.enqueue 'coffee-resque-retry', 'bad2', []
+        enqueueTask 'bad', ['a']
+        enqueueTask 'bad', ['b']
+        enqueueTask 'bad2', []
         watcher.start redisHostAndPort
         worker.start()
         startTime = new Date
@@ -71,7 +77,7 @@ vows.describe('coffee-resque failure retry')
     'terminate test suite':
       topic: ->
         watcher.stop()
-        worker.end -> resque.end()
+        worker.end -> resqueForWorker.end()
         true
       
       ok: (v) -> assert.ok v

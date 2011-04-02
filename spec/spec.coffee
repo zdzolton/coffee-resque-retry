@@ -45,7 +45,7 @@ vows.describe('coffee-resque failure retry')
     'set up an error callback that looks for the "bad" job':
       topic: ->
         worker.on 'error', (err, work, queue, job) =>
-          puts "error"
+          # puts "error"
           {callee} = arguments
           callee.badCount or= 0
           @callback() if job.class is 'bad' and ++callee.badCount is 2

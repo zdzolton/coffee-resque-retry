@@ -2,7 +2,7 @@
 coffeeResque = require 'coffee-resque'
 exports.watcher = require './scheduled-task-watcher'
 
-log = console.error
+#log = console.error
 
 exports.createWorker = (connection, queues, jobsWithRetry) ->
   callbacks = getCallbacksObject jobsWithRetry
@@ -15,39 +15,42 @@ class exports.WorkerWithRetry extends coffeeResque.Worker
     coffeeResque.Worker.apply @, [connection, queues, jobs]
     
   perform: (job) ->
-    log "perform()"
+    return unless @running
+    #log "perform()"
     key = redisRetryKey job
     @redis.setnx key, -1, (err, res) =>
       unless err?
         @redis.incr key, (err, res) =>
           unless err?
-            log "incr #{key} result: #{res}"
+            #log "incr #{key} result: #{res}"
             workerPrototype.perform.apply @, [job]
   
   succeed: (result, job) ->
-    log "succeed()"
+    return unless @running
+    #log "succeed()"
     @redis.del redisRetryKey job, (err, res) =>
-      log "key deleted: #{key}" unless err?
+      #log "key deleted: #{key}" unless err?
       workerPrototype.succeed.apply @, [result, job]
   
   fail: (error, job) ->
-    log "fail()"
+    return unless @running
+    #log "fail()"
     @getRetryAttempt job, (err, retryAttempt) =>
-      if err? then log "error: #{inspect err}"
+      if err? then #log "error: #{inspect err}"
       else
         limit = @getRetryLimit job
-        log "retryAttempt: #{retryAttempt}"
-        log "@getRetryLimit: #{limit}"
-        # if we're gonna retry, let's suppress the failure logging
+        #log "retryAttempt: #{retryAttempt}"
+        #log "@getRetryLimit: #{limit}"
+        # if we're gonna retry, let's suppress the failure #logging
         if retryAttempt < limit then @tryAgain job
         else
           key = redisRetryKey job
           @redis.del key, (err, res) =>
-            log "key deleted: #{key}" unless err? 
+            #log "key deleted: #{key}" unless err? 
             workerPrototype.fail.apply @, [error, job]
   
   tryAgain: (job) ->
-    log "tryAgain()"
+    #log "tryAgain()"
     retryDelay = @getRetryDelay job
     if retryDelay <= 0
       coffeeResque

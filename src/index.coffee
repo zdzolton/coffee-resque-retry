@@ -1,88 +1,85 @@
 {puts,inspect} = require 'sys'
+coffeeResque = require 'coffee-resque'
 exports.watcher = require './scheduled-task-watcher'
 
-exports.createWorker = (resque, queue, jobsWithRetry) ->
-  worker = resque.worker queue, getRegularJobsObject jobsWithRetry
-  decorate worker, jobsWithRetry
-  worker
+log = console.error
 
-getRegularJobsObject = (jobsWithRetry) ->
+exports.createWorker = (connection, queues, jobsWithRetry) ->
+  callbacks = getCallbacksObject jobsWithRetry
+  new exports.WorkerWithRetry connection, queues, callbacks, jobsWithRetry
+
+workerPrototype = coffeeResque.Worker::
+
+class exports.WorkerWithRetry extends coffeeResque.Worker
+  constructor: (connection, queues, jobs, @jobsWithRetry) ->
+    coffeeResque.Worker.apply @, [connection, queues, jobs]
+    
+  perform: (job) ->
+    log "perform()"
+    key = redisRetryKey job
+    @redis.setnx key, -1, (err, res) =>
+      unless err?
+        @redis.incr key, (err, res) =>
+          unless err?
+            log "incr #{key} result: #{res}"
+            workerPrototype.perform.apply @, [job]
+  
+  succeed: (result, job) ->
+    log "succeed()"
+    @redis.del redisRetryKey job, (err, res) =>
+      log "key deleted: #{key}" unless err?
+      workerPrototype.succeed.apply @, [result, job]
+  
+  fail: (error, job) ->
+    log "fail()"
+    @getRetryAttempt job, (err, retryAttempt) =>
+      if err? then log "error: #{inspect err}"
+      else
+        limit = @getRetryLimit job
+        log "retryAttempt: #{retryAttempt}"
+        log "@getRetryLimit: #{limit}"
+        # if we're gonna retry, let's suppress the failure logging
+        if retryAttempt < limit then @tryAgain job
+        else
+          key = redisRetryKey job
+          @redis.del key, (err, res) =>
+            log "key deleted: #{key}" unless err? 
+            workerPrototype.fail.apply @, [error, job]
+  
+  tryAgain: (job) ->
+    log "tryAgain()"
+    retryDelay = @getRetryDelay job
+    if retryDelay <= 0
+      coffeeResque
+        .connect(@redis)
+        .enqueue @queue, job.class, job.args
+    else enqueueIn @redis, retryDelay, @queue, job.class, job.args
+
+  getRetryAttempt: (job, cb) ->
+    @redis.get redisRetryKey(job), cb
+
+  getRetryLimit: (job) ->
+    @jobsWithRetry[job.class]?.retry_limit or 0
+
+  getRetryDelay: (job) ->
+    @jobsWithRetry[job.class]?.retry_delay or 0
+
+getCallbacksObject = (jobsWithRetry) ->
   jobs = {}
-  for name, job of jobsWithRetry when typeof job.func is 'function'
-    jobs[name] = job.func
+  for name, {func} of jobsWithRetry when typeof func is 'function'
+    jobs[name] = func
   jobs
 
-decorate = (worker, jobsWithRetry) ->
-  worker.jobsWithRetry = jobsWithRetry
-  worker.fail = overrideFail worker
-  worker.on 'job', (worker, queue, job) ->
-    beforePerformRetry worker, job
-  worker.on 'success', (worker, queue, job, result) ->
-    afterPerformRetry worker, job
-
-overrideFail = (worker) ->
-  originalFailFunc = worker.fail
-  {redis} = worker
-  (error, job) ->
-    getRetryAttempt worker, job, (err, retryAttempt) ->
-      unless err?
-        # if we're gonna retry, let's suppress the failure logging
-        if retryAttempt < getRetryLimit worker, job
-          retryFailure worker, job, err
-        else
-          redis.del redisRetryKey job
-          originalFailFunc.apply worker, [error, job]
-
-getJobWithRetry = (worker, job) ->
-  for name, jobDef of worker.jobsWithRetry
-    return jobDef if name is job.class
-
-getRetryLimit = (worker, job) ->
-  getJobWithRetry(worker, job)?.retry_limit or 0
-
-getRetryDelay = (worker, job) ->
-  getJobWithRetry(worker, job)?.retry_delay or 0
-
-getRetryAttempt = (worker, job, cb) -> worker.redis.get redisRetryKey(job), cb
+redisRetryKey = (job) ->
+  name = job.class
+  {args} = job
+  ['resque-retry', name].concat(identifier args).join(":").replace /\s/g, ''
 
 identifier = (args) ->
   types = ['string', 'number', 'boolean']
   (a.toString().slice 0, 40 for a in args when typeof a in types)
     .slice(0, 4)
     .join '-'
-
-redisRetryKey = (job) ->
-  name = job.class
-  {args} = job
-  ['resque-retry', name]
-    .concat(identifier args)
-    .join(":")
-    .replace /\s/g, ''
-
-beforePerformRetry = (worker, job) ->
-  {redis} = worker
-  key = redisRetryKey job
-  redis.setnx key, -1  # default to -1 if not set.
-  redis.incr key
-
-retryFailure = (worker, job, err) ->
-  {redis} = worker
-  getRetryAttempt worker, job, (err, retryAttempt) ->
-    unless err?
-      if retryAttempt < getRetryLimit worker, job
-        tryAgain redis, worker, job
-      else redis.del redisRetryKey job
-
-tryAgain = (redis, worker, job) ->
-  retryDelay = getRetryDelay worker, job
-  if retryDelay <= 0
-    require('coffee-resque')
-      .connect({redis})
-      .enqueue worker.queue, job.class, job.args
-  else enqueueIn redis, retryDelay, worker.queue, job.class, job.args
-
-afterPerformRetry = (worker, job) ->
-  worker.redis.del redisRetryKey job
 
 enqueueIn = (redis, numberOfSecondsFromNow, queue, jobName, args) ->
   timestamp = (new Date).valueOf() + numberOfSecondsFromNow * 1000

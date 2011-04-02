@@ -28,7 +28,7 @@ jobs =
   bad2:
     retry_limit: 1
     retry_delay: 3
-    func: (cb) -> cb new Error 'NO!!'
+    func: (_, cb) -> cb new Error 'NO!!'
 
 vows.describe('coffee-resque failure retry')
 
@@ -54,19 +54,19 @@ vows.describe('coffee-resque failure retry')
       'should have ran six times': ->
         assert.equal jobs.bad.func.count, 6
   
-    # 'set up an error callback that looks for the "bad2" job':
-    #   topic: ->
-    #     worker.on 'error', (_e, _w, _q, job) =>
-    #       @callback() if job.class is 'bad2'
-    #     return
-    # 
-    #   'should be at least 3 seconds later': ->
-    #     assert.isTrue (new Date) - startTime >= 3000
+    'set up an error callback that looks for the "bad2" job':
+      topic: ->
+        worker.on 'error', (_e, _w, _q, job) =>
+          @callback() if job.class is 'bad2'
+        return
+    
+      'should be at least 3 seconds later': ->
+        assert.isTrue (new Date) - startTime >= 3000
     
     'start the mouse trap': ->
       enqueueTask 'bad', ['abc123']
       enqueueTask 'bad', ['098zyx']
-      # enqueueTask 'bad2', []
+      enqueueTask 'bad2', ['quux']
       watcher.start redisHostAndPort
       worker.start()
       startTime = new Date

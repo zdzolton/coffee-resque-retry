@@ -1,7 +1,7 @@
 {
   "name": "coffee-resque-retry",
   "description": "Adds some retry options to coffee-resque. Concept lifted from Ruby's resque-retry",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "repository": {},
   "author": "Zach Zolton <zachary.zolton@gmail.com>",
   "main": "lib/index",
@@ -12,6 +12,7 @@
     "lib": "./lib"
   },
   "modules": {
+    "index.js": "lib/index.js",
     "scheduled-task-watcher.js": "lib/scheduled-task-watcher.js"
   },
   "scripts": {
@@ -19,5 +20,8 @@
   },
   "engines": {
     "node": "0.2.6"
-  }
+  },
+  "files": [
+    ""
+  ]
 }

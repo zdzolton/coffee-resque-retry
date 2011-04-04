@@ -2,8 +2,6 @@
 coffeeResque = require 'coffee-resque'
 exports.watcher = require './scheduled-task-watcher'
 
-#log = console.error
-
 exports.createWorker = (connection, queues, jobsWithRetry) ->
   callbacks = getCallbacksObject jobsWithRetry
   new exports.WorkerWithRetry connection, queues, callbacks, jobsWithRetry
@@ -13,45 +11,43 @@ workerPrototype = coffeeResque.Worker::
 class exports.WorkerWithRetry extends coffeeResque.Worker
   constructor: (connection, queues, jobs, @jobsWithRetry) ->
     coffeeResque.Worker.apply @, [connection, queues, jobs]
-    
+  
+  end: (cb) ->
+    @removeAllListeners 'poll'
+    @removeAllListeners 'job'
+    @removeAllListeners 'error'
+    @removeAllListeners 'success'
+    super cb
+  
   perform: (job) ->
     return unless @running
-    #log "perform()"
     key = redisRetryKey job
     @redis.setnx key, -1, (err, res) =>
-      unless err?
+      unless err? or not @running
         @redis.incr key, (err, res) =>
-          unless err?
-            #log "incr #{key} result: #{res}"
+          unless err? or not @running
             workerPrototype.perform.apply @, [job]
   
   succeed: (result, job) ->
     return unless @running
-    #log "succeed()"
     @redis.del redisRetryKey job, (err, res) =>
-      #log "key deleted: #{key}" unless err?
-      workerPrototype.succeed.apply @, [result, job]
+      unless err? or not @running
+        workerPrototype.succeed.apply @, [result, job]
   
   fail: (error, job) ->
     return unless @running
-    #log "fail()"
     @getRetryAttempt job, (err, retryAttempt) =>
-      if err? then #log "error: #{inspect err}"
-      else
-        limit = @getRetryLimit job
-        #log "retryAttempt: #{retryAttempt}"
-        #log "@getRetryLimit: #{limit}"
-        # if we're gonna retry, let's suppress the failure #logging
+      unless err? or not @running
+        limit = @jobsWithRetry[job.class]?.retry_limit or 0
         if retryAttempt < limit then @tryAgain job
         else
           key = redisRetryKey job
           @redis.del key, (err, res) =>
-            #log "key deleted: #{key}" unless err? 
-            workerPrototype.fail.apply @, [error, job]
+            unless err? or not @running
+              workerPrototype.fail.apply @, [error, job]
   
   tryAgain: (job) ->
-    #log "tryAgain()"
-    retryDelay = @getRetryDelay job
+    retryDelay = @jobsWithRetry[job.class]?.retry_delay or 0
     if retryDelay <= 0
       coffeeResque
         .connect(@redis)
@@ -60,12 +56,6 @@ class exports.WorkerWithRetry extends coffeeResque.Worker
 
   getRetryAttempt: (job, cb) ->
     @redis.get redisRetryKey(job), cb
-
-  getRetryLimit: (job) ->
-    @jobsWithRetry[job.class]?.retry_limit or 0
-
-  getRetryDelay: (job) ->
-    @jobsWithRetry[job.class]?.retry_delay or 0
 
 getCallbacksObject = (jobsWithRetry) ->
   jobs = {}

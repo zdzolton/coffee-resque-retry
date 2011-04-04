@@ -5,6 +5,7 @@ resqueConnect = require('coffee-resque').connect
 
 redisHostAndPort = host: 'localhost', port: 6379
 testQueueName = 'coffee-resque-retry'
+testQueueKey = "resque:queue:#{testQueueName}"
 
 enqueueTask = (jobName, args) ->
   resque = resqueConnect redisHostAndPort
@@ -31,8 +32,12 @@ jobs =
     func: (_, cb) -> cb new Error 'NO!!'
 
 vows.describe('coffee-resque failure retry')
-
+  
   .addBatch
+    'clear out Redis':
+      topic: -> resqueForWorker.redis.del testQueueKey, => @callback null, true; return
+      ok: -> assert.ok true
+
     'initialize worker object':
       topic: ->
         worker = createWorker resqueForWorker, testQueueName, jobs
@@ -78,12 +83,15 @@ vows.describe('coffee-resque failure retry')
     'terminate test suite':
       topic: ->
         watcher.stop()
-        worker.end -> resqueForWorker.end()
-        true
-      
-      ok: (v) -> assert.ok v
+        worker.end =>
+          resqueForWorker.end()
+          @callback()
       
       "stopping extra times": ->
         assert.doesNotThrow (-> watcher.stop()), Error
+      
+      HACK: ->
+        # something is stopping the process from terminating...
+        setTimeout (-> process.exit()), 500
 
   .export module

@@ -3,7 +3,7 @@ generate-js: deps
 	@find src -name '*.coffee' |xargs coffee -c -o lib
 
 remove-js:
-	@rm -fr lib/
+	@rm -rf lib/
 
 deps:
 	@test `which coffee` || echo 'You need to have CoffeeScript in your PATH.\nPlease install it using `npm install coffee-script`.'
@@ -11,7 +11,7 @@ deps:
 	@test `which npm` || echo 'You need to have npm in your PATH.\nPlease install it. (See https://github.com/isaacs/npm)'
 
 test: deps
-	@vows
+	@vows ./spec/*
 
 publish: generate-js test
 	npm publish

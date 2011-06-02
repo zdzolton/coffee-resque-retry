@@ -4,6 +4,10 @@
   "version": "0.0.3",
   "author": "Zach Zolton <zachary.zolton@gmail.com>",
   "main": "lib/index",
+  "devDependencies": {
+    "vows": "0.5.x",
+    "coffee-script": "1.x.x"
+  },
   "dependencies": {
     "coffee-resque": "0.1.x",
     "redis": "0.x.x"
@@ -12,6 +16,8 @@
     "type": "git",
     "url": "https://github.com/zdzolton/coffee-resque-retry.git"
   },
+  "files": ["./lib"],
+  "directories": { "lib": "./lib" },
   "scripts": { "test": "make test" },
   "engines": { "node": "0.4.x" }
 }

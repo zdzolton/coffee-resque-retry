@@ -1,12 +1,14 @@
 {puts,inspect} = require 'sys'
 
 redis = intervalID = null
-stopping = false
+alreadyWorking = stopping = false
 
 exports.start = (opts) ->
   unless redis? and not stopping
     redis = require('redis').createClient opts.port, opts.host
-    intervalID = setInterval handleDelayedItems, 1000
+    intervalID = setInterval ->
+      handleDelayedItems() unless alreadyWorking
+    , 500
 
 exports.stop = ->
   stopping = true
@@ -17,11 +19,15 @@ exports.stop = ->
   
 handleDelayedItems = ->
   unless stopping
+    alreadyWorking = true
     nextDelayedTimestamp (err, timestamp) ->
       if timestamp?
         enqueueDelayedItemsForTimestamp timestamp, (err) ->
-          # note the recursive looping...
-          nextDelayedTimestamp arguments.callee unless err?
+          if err? then alreadyWorking = false
+          else
+            # note the recursive looping...
+            handleDelayedItems()
+      else alreadyWorking = false
   return
 
 nextDelayedTimestamp = (cb) ->
@@ -38,7 +44,7 @@ enqueueDelayedItemsForTimestamp = (timestamp, cb) ->
   nextItemForTimestamp timestamp, (err, item) ->
     if item?
       enqueueScheduledTask item
-      # note the recursive looping...
+      # note the recursive looping to anonymous function...
       nextItemForTimestamp timestamp, arguments.callee
     else cb err
 

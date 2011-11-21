@@ -1,5 +1,5 @@
-{puts,inspect} = require 'sys'
-coffeeResque = require 'coffee-resque'
+{puts,inspect}  = require 'sys'
+coffeeResque    = require 'coffee-resque'
 exports.watcher = require './scheduled-task-watcher'
 
 exports.createWorker = (connection, queues, jobsWithRetry) ->
@@ -7,6 +7,12 @@ exports.createWorker = (connection, queues, jobsWithRetry) ->
   new exports.WorkerWithRetry connection, queues, callbacks, jobsWithRetry
 
 workerPrototype = coffeeResque.Worker::
+
+coffeeResque.Connection::enqueueIn = (queue, jobName, numberOfSecondsFromNow, args) ->
+  enqueueIn @redis, numberOfSecondsFromNow, queue, jobName, args
+
+coffeeResque.Connection::enqueueAt = (queue, jobName, dateToExecute, args) ->
+  enqueueAt @redis, dateToExecute.valueOf(), queue, jobName, args
 
 class exports.WorkerWithRetry extends coffeeResque.Worker
   constructor: (connection, queues, jobs, @jobsWithRetry) ->

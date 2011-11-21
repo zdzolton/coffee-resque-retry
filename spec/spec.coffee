@@ -1,11 +1,11 @@
-{puts,inspect} = require 'sys'
-vows = require 'vows'
-assert = require 'assert'
-resqueConnect = require('coffee-resque').connect
+{puts,inspect}  = require 'sys'
+vows            = require 'vows'
+assert          = require 'assert'
+resqueConnect   = require('coffee-resque').connect
 
-redisHostAndPort = host: 'localhost', port: 6379
-testQueueName = 'coffee-resque-retry'
-testQueueKey = "resque:queue:#{testQueueName}"
+redisHostAndPort  = host: 'localhost', port: 6379
+testQueueName     = 'coffee-resque-retry'
+testQueueKey      = "resque:queue:#{testQueueName}"
 
 enqueueTask = (jobName, args) ->
   resque = resqueConnect redisHostAndPort
@@ -30,6 +30,8 @@ jobs =
     retry_limit: 1
     retry_delay: 3
     func: (_, cb) -> cb new Error 'NO!!'
+  whateva:
+    func: (_, cb) -> cb 'ok'
 
 vows.describe('coffee-resque failure retry')
 
@@ -80,6 +82,24 @@ vows.describe('coffee-resque failure retry')
   
   "starting extra times": ->
     assert.doesNotThrow (-> watcher.start redisHostAndPort), Error
+
+.addBatch
+  'enqueue task to run in 3 seconds':
+    topic: ->
+      startTime = new Date
+      resque = resqueConnect redisHostAndPort
+      resque.enqueueIn testQueueName, 'whateva', 3, ['fugettaboudit']
+      resque.end()
+      return 'hackety hack hack'
+    
+    'set up a callback for our "whateva" task':
+      topic: ->
+        worker.on 'job', (_w, _q, job) =>
+          @callback() if job.class is 'whateva'
+        return
+    
+      'should be at least 3 seconds later': ->
+        assert.isTrue (new Date) - startTime >= 3000
 
 .addBatch
   'terminate test suite':

@@ -46,7 +46,7 @@ Usage:
               cb result
 
 
-  worker.start()
+  watcher.start()
 
 Now, wait for other code to enqueue tasks, and when you're
-program is shutting down remember to call `worker.stop()`
+program is shutting down remember to call `watcher.stop()`
